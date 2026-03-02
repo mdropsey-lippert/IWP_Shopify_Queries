@@ -14,7 +14,7 @@ DEBUG = False
 EMAIL_RECIPIENTS = 'mdropsey@lippertent.com,austin.ashley@lippertent.com'
 EMAIL_SUBJECT = 'IWP_SHOPIFY_QUERIES: Error in Shipping Profile Update Script'
 EMAIL_MSG = 'Please see error log for details.'
-LOG_PATH = r'.\script_files\logs'
+LOG_PATH = r'.\queries\shipping_profile\script_files\logs'
 WORKING_DIR = str(os.getcwd())
 # ---------------------------------------
 
