@@ -32,7 +32,7 @@ import os
 # -------------------------------------
 
 # ---------- Constants/Variables ----------------
-DEBUG = False
+DEBUG = True
 HEADER_CONTENT_TYPE = 'application/json'
 script_path = os.path.abspath(__file__)
 WORKING_DIR = os.path.dirname(script_path)
@@ -65,6 +65,8 @@ def get_variants(vendor_name) -> Dict[str, Any]:
     # Cursor will be used for pagination in the GraphQL query. Will be str or None.
     cursor: Optional[str] = None
     variant_count = 1
+    # vendor_name = "'" + vendor_name + "'"
+    # print(vendor_name)
 
     # Using a Dictionary to store the variables for GraphQL, forcing the keys to be strings and the values to be any type.
     variables: Dict[str, any] = {
@@ -78,6 +80,7 @@ def get_variants(vendor_name) -> Dict[str, Any]:
             products(first: $first, after: $after, query: $query) {
                 edges {
                 node {
+                    vendor
                     variants(first: 50) {
                     edges { node { id sku } }
                     }
@@ -109,7 +112,9 @@ def get_variants(vendor_name) -> Dict[str, Any]:
             raise RuntimeError(error_msg)
 
         # Check response for errors. If so, log the error and send an email.
+
         data = response.json()
+
         if "errors" in data and data["errors"]:
             error_msg = f"GraphQL query returned errors: {data['errors']}"
             send_to, subject, log_path = email_vars
@@ -117,26 +122,29 @@ def get_variants(vendor_name) -> Dict[str, Any]:
                          __file__, log_path)
             raise RuntimeError(error_msg)
 
-        # Process the data to get the variants. This is just a placeholder and will need to be updated with the actual logic to extract the variants from the response.
-        # Assign the products and edges to variables, using .get() to avoid KeyErrors if the keys are not present in the response.
+        # Process the data to get the variants.
+        # Assign the products and edges to variables.  Use .get() with default values to avoid KeyErrors if the expected keys are not in the response.
         products = (data.get("data") or {}).get("products") or {}
         edges = products.get("edges") or []
 
         # Loop through all of the edges array to get the variants for each product.  Return the variant_id and sku fields
-
         for edge in edges:
             node = edge.get("node") or {}
-            variants = node.get("variants") or {}
-            variant_edges = variants.get("edges") or []
-            for variant_edge in variant_edges:
-                variant_node = variant_edge.get("node") or {}
-                variant_id = variant_node.get("id")
-                variant_sku = variant_node.get("sku")
-                # print(
-                # f"{variant_count} -- Variant ID: {variant_id}, SKU: {variant_sku}")
-                variant_count += 1
-                # Assign results to a dictionary and append to the response list.
-                variant_dict[variant_id] = variant_sku
+            vendor = node.get("vendor") or ""
+            if vendor.casefold() != str(vendor_name).casefold():
+                print(
+                    f"Warning: Vendor name mismatch. Expected '{vendor_name}', but got '{vendor}'. Skipping this product.")
+            else:
+                variants = node.get("variants") or {}
+                variant_edges = variants.get("edges") or []
+                for variant_edge in variant_edges:
+                    variant_node = variant_edge.get("node") or {}
+                    variant_id = variant_node.get("id")
+                    variant_sku = variant_node.get("sku")
+
+                    variant_count += 1
+                    # Assign results to a dictionary and append to the response list.
+                    variant_dict[variant_id] = variant_sku
                 # response_list.append(variant_dict)
 
         # Print results of combing through the response.
@@ -167,15 +175,19 @@ def main():
     # print(WORKING_DIR)
     output_dir = os.path.join(WORKING_DIR, r'script_files\output')
     output_file = os.path.join(output_dir, 'variants_by_vendor.json')
-    """vendor_lookup_name = input(
+    """
+    vendor_lookup_name = input(
         "Enter the vendor name to get the variants for: ")
     """
     vendor_lookup_name = "PAI Industries"
+
     with open(output_file, 'w') as result_file:
         response = get_variants(vendor_name=vendor_lookup_name)
         json.dump(response, result_file, indent=4)
-    pass
+    print(
+        f"Variants for vendor: '{vendor_lookup_name}' have been written to {output_file}.")
 
 
 if __name__ == '__main__':
     main()
+    print(f'Script {__file__} complete.')
