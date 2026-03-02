@@ -27,10 +27,26 @@ Example:
     - update_shipping_profile.py --vendor "Vendor Name" --shipping_profile_id "Shipping Profile ID"
 """
 
+# ------------ Imports ----------------
+from utils import email_errors, email_vars
+from dotenv import load_dotenv
+from typing import List, Dict, Any, Set, Optional
+import requests
+import json
+import os
+# -------------------------------------
 
 # ---------- Constants/Variables ----------------
 DEBUG = False
 # -----------------------------------------------
+
+
+def read_json(file_path) -> Dict[str, any]:
+    """Function to read a JSON file and return the contents as a dictionary.
+    Args:
+        file_path (str): The path to the JSON file to read.
+        """
+    pass
 
 
 def main():
