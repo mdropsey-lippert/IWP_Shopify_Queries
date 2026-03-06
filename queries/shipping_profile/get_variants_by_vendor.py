@@ -32,7 +32,7 @@ import os
 # -------------------------------------
 
 # ---------- Constants/Variables ----------------
-DEBUG = True
+DEBUG = False
 HEADER_CONTENT_TYPE = 'application/json'
 script_path = os.path.abspath(__file__)
 WORKING_DIR = os.path.dirname(script_path)
@@ -49,6 +49,7 @@ def get_variants(vendor_name) -> Dict[str, Any]:
     # Build return variables
     response_list = []
     variant_dict = {}
+    non_physical_item = {}
 
     # Use .env file to store the Shopify API credentials and other configuration settings.  Load the .env file to access the variables.
     load_dotenv()
@@ -82,7 +83,9 @@ def get_variants(vendor_name) -> Dict[str, Any]:
                 node {
                     vendor
                     variants(first: 50) {
-                    edges { node { id sku } }
+                    edges { node { id sku inventoryItem{
+											requiresShipping
+										}} }
                     }
                 }
                 }
@@ -102,21 +105,18 @@ def get_variants(vendor_name) -> Dict[str, Any]:
             timeout=60)
 
         # Check if the response is successful. If not, log the error and send an email.
+        error_msg = ""
         response.raise_for_status()
         status = response.status_code
         if status != 200:
             error_msg = f"GraphQL query failed with status code {status}: {response.text}"
-            send_to, subject, log_path = email_vars
-            email_errors(send_to, subject, error_msg,
-                         __file__, log_path)
-            raise RuntimeError(error_msg)
 
         # Check response for errors. If so, log the error and send an email.
-
         data = response.json()
-
         if "errors" in data and data["errors"]:
             error_msg = f"GraphQL query returned errors: {data['errors']}"
+
+        if error_msg:
             send_to, subject, log_path = email_vars
             email_errors(send_to, subject, error_msg,
                          __file__, log_path)
@@ -141,11 +141,17 @@ def get_variants(vendor_name) -> Dict[str, Any]:
                     variant_node = variant_edge.get("node") or {}
                     variant_id = variant_node.get("id")
                     variant_sku = variant_node.get("sku")
+                    inv_item = variant_node.get("inventoryItem") or {}
+                    requires_shipping = inv_item.get("requiresShipping")
+                    if requires_shipping is True:
+                        variant_count += 1
 
-                    variant_count += 1
-                    # Assign results to a dictionary and append to the response list.
-                    variant_dict[variant_id] = variant_sku
-                # response_list.append(variant_dict)
+                        # Assign results to a dictionary and append to the response list.
+                        variant_dict[variant_id] = variant_sku
+                    else:
+                        non_physical_item[variant_id] = variant_sku
+                        print(
+                            f"Variant with ID '{variant_id}' and SKU '{variant_sku}' is NOT a physical item on Shopify.  Saving to file...")
 
         # Print results of combing through the response.
         print(
@@ -167,7 +173,7 @@ def get_variants(vendor_name) -> Dict[str, Any]:
                     f"Exiting before fully complete for debugging purposes.  Expected to have {variant_count - 1} variants in the response list.")
                 break
 
-    return variant_dict
+    return variant_dict, non_physical_item
 
 
 def main():
@@ -175,17 +181,25 @@ def main():
     # print(WORKING_DIR)
     output_dir = os.path.join(WORKING_DIR, r'script_files\output')
     output_file = os.path.join(output_dir, 'variants_by_vendor.json')
+    invalid_output_file = os.path.join(output_dir, 'non_physical_items.json')
     """
     vendor_lookup_name = input(
         "Enter the vendor name to get the variants for: ")
     """
     vendor_lookup_name = "PAI Industries"
 
+    # Write valid items to JSON file.
     with open(output_file, 'w') as result_file:
         response = get_variants(vendor_name=vendor_lookup_name)
-        json.dump(response, result_file, indent=4)
+        json.dump(response[0], result_file, indent=4)
     print(
         f"Variants for vendor: '{vendor_lookup_name}' have been written to {output_file}.")
+
+    if response[1]:
+        with open(invalid_output_file, 'w') as invalid_file:
+            json.dump(response[1], invalid_file, indent=4)
+        print(
+            f"Non-physical items for vendor: '{vendor_lookup_name}' have been written to {invalid_output_file}.")
 
 
 if __name__ == '__main__':

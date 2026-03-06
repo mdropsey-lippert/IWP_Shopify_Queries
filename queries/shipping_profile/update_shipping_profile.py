@@ -31,7 +31,8 @@ Example:
 from utils import email_errors, email_vars
 from dotenv import load_dotenv
 from typing import List, Dict, Any, Set, Optional
-import requests
+import asyncio
+import aiohttp
 import json
 import os
 # -------------------------------------
@@ -41,11 +42,83 @@ DEBUG = False
 # -----------------------------------------------
 
 
-def read_json(file_path) -> Dict[str, any]:
-    """Function to read a JSON file and return the contents as a dictionary.
+def read_json(file_path) -> List:
+    """Function to read a JSON file and return the contents as a list of ALL variant ID's.
+        This list will be condensed down to batches of 250 variant ID's by the build_variant_list function.
     Args:
         file_path (str): The path to the JSON file to read.
         """
+    # Attempt to read the JSON file from file_path and convert to list
+    try:
+        with open(file_path, 'r') as json_file:
+            json_list = []
+            data = json.load(json_file)
+            for key in data.keys():
+                json_list.append(key)
+            return json_list
+
+    # Return error messages based on type of exception.
+    except FileNotFoundError:
+        print(
+            f'Error: File not found in path: {file_path}.  Please verify that file exists and try again.')
+    except json.JSONDecodeError as err_json:
+        print(f'Error decoding JSON file: {err_json}')
+
+
+def build_variant_list(json_list, batch_size) -> List:
+    """Read list of JSON keys and build a list of 250 records to be used by the GraphQL call.
+    Args:
+        json_list (List): Master list of all variant ID's provided by read_json function.
+
+    """
+    # Initialize list to return and i for index to iterate through list
+    variant_list = []
+    i = 0
+    while i < batch_size:
+        print(
+            f'Record at Index: {i} -- Value: {json_list[i]} to be added to batch')
+
+        variant_list.append([json_list[i]])
+        json_list.pop([i])
+        i += 1
+
+    return variant_list
+    pass
+
+
+def make_graphql_req(profile_id, variants=[], method=None):
+    """Function to make the GraphQL call to Shopify.  
+        In this case it will use the deliveryProfileUpdate mutation, schema version 2025-10.
+    Args:
+    """
+    query = """
+    mutation deliveryProfileUpdate($id: ID!, $profile: DeliveryProfileInput!) {
+        deliveryProfileUpdate(id: $id, profile: $profile) {
+            profile {
+            id
+                    name
+                    productVariantsCount
+                    {
+                        count
+                    }
+            }
+            userErrors {
+            field
+            message
+            }
+        }
+        }
+    """
+
+    variant_method = 'variantsToAssociate'
+    if method == 'DELETE':
+        variant_method = 'variantsToDissociate'
+
+    variables = {
+        'id': profile_id,
+        variant_method: variants
+    }
+
     pass
 
 
